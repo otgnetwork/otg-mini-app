@@ -85,8 +85,9 @@ async def menu_music(callback: CallbackQuery) -> None:
         "<b>🎵 Поиск музыки</b>\n\n"
         "Отправь название трека или исполнителя.\n"
         "Пример: <code>Eminem</code>",
-        reply_markup=main_menu()
+        parse_mode="HTML"
     )
+
     await callback.answer()
 
 
@@ -193,8 +194,10 @@ async def handle_text(message: Message) -> None:
         )
 
         await message.answer(
-            "Можешь выбрать следующее действие:",
-            reply_markup=main_menu()
+    "🎯 Пока я обрабатываю заявку, ты можешь:\n\n"
+    "— найти музыку 🎧\n"
+    "— или посмотреть эфир в TikTok 🎥",
+    reply_markup=main_menu()
         )
 
         await bot.send_message(
