@@ -64,12 +64,21 @@ def safe_filename(value: str) -> str:
 
 
 @dp.message(CommandStart())
-async def cmd_start(message: Message) -> None:
-    user_mode[message.from_user.id] = "music"
+async def cmd_start(message: Message):
+    await message.answer(
+        "🎧 <b>Привет! Я делаю персональные песни под заказ</b>\n\n"
+        "🔥 Подойдет для:\n"
+        "— любимой ❤️\n"
+        "— годовщины 💍\n"
+        "— подарка 🎁\n\n"
+        "🎬 Я также веду живые эфиры в TikTok — можешь залететь прямо сейчас 👇",
+        parse_mode="HTML"
+    )
 
     await message.answer(
-        "<b>Добро пожаловать в музыкального бота</b>\n\nВыбери действие ниже:",
-        reply_markup=ReplyKeyboardRemove()
+        "Добро пожаловать в музыкального бота\n\n"
+        "Выбери действие ниже:",
+        reply_markup=main_menu()
     )
 
     await message.answer(
