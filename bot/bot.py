@@ -14,76 +14,108 @@ from aiogram.utils.keyboard import InlineKeyboardBuilder
 load_dotenv()
 
 BOT_TOKEN = os.getenv("BOT_TOKEN")
-BACKEND_URL = os.getenv("BACKEND_URL")  # ОБЯЗАТЕЛЬНО: https://...railway.app
+BACKEND_URL = os.getenv("BACKEND_URL")
 
 ADMIN_ID = 1485749631
 TIKTOK_URL = "https://www.tiktok.com/@alexey_pv_"
 DB_PATH = "referrals.db"
 
-bot = Bot(token=BOT_TOKEN, default=DefaultBotProperties(parse_mode=ParseMode.HTML))
+if not BOT_TOKEN:
+    raise RuntimeError("BOT_TOKEN is not set")
+
+if not BACKEND_URL:
+    raise RuntimeError("BACKEND_URL is not set")
+
+bot = Bot(
+    token=BOT_TOKEN,
+    default=DefaultBotProperties(parse_mode=ParseMode.HTML),
+)
 dp = Dispatcher()
 
-user_mode = {}
-admin_reply_target = {}
-BOT_USERNAME = None
+user_mode: dict[int, str] = {}
+admin_reply_target: dict[int, int] = {}
+BOT_USERNAME: str | None = None
 
-# ---------- БД ----------
+
+# ---------- DB ----------
 def init_db():
     conn = sqlite3.connect(DB_PATH)
     cur = conn.cursor()
 
-    cur.execute("""
-    CREATE TABLE IF NOT EXISTS users (
-        user_id INTEGER PRIMARY KEY,
-        invited_by INTEGER
+    cur.execute(
+        """
+        CREATE TABLE IF NOT EXISTS users (
+            user_id INTEGER PRIMARY KEY,
+            invited_by INTEGER
+        )
+        """
     )
-    """)
 
-    cur.execute("""
-    CREATE TABLE IF NOT EXISTS referrals (
-        inviter_id INTEGER,
-        invited_user_id INTEGER UNIQUE
+    cur.execute(
+        """
+        CREATE TABLE IF NOT EXISTS referrals (
+            inviter_id INTEGER,
+            invited_user_id INTEGER UNIQUE
+        )
+        """
     )
-    """)
 
     conn.commit()
     conn.close()
 
 
-def register_user(user_id):
+def register_user(user_id: int):
     conn = sqlite3.connect(DB_PATH)
     cur = conn.cursor()
-    cur.execute("INSERT OR IGNORE INTO users (user_id, invited_by) VALUES (?, NULL)", (user_id,))
+    cur.execute(
+        "INSERT OR IGNORE INTO users (user_id, invited_by) VALUES (?, NULL)",
+        (user_id,),
+    )
     conn.commit()
     conn.close()
 
 
-def save_ref(invited, inviter):
+def save_ref(invited: int, inviter: int) -> bool:
     if invited == inviter:
         return False
 
     conn = sqlite3.connect(DB_PATH)
     cur = conn.cursor()
 
-    cur.execute("SELECT invited_by FROM users WHERE user_id=?", (invited,))
+    cur.execute(
+        "INSERT OR IGNORE INTO users (user_id, invited_by) VALUES (?, NULL)",
+        (invited,),
+    )
+    cur.execute(
+        "INSERT OR IGNORE INTO users (user_id, invited_by) VALUES (?, NULL)",
+        (inviter,),
+    )
+
+    cur.execute("SELECT invited_by FROM users WHERE user_id = ?", (invited,))
     row = cur.fetchone()
 
     if row and row[0]:
         conn.close()
         return False
 
-    cur.execute("UPDATE users SET invited_by=? WHERE user_id=?", (inviter, invited))
-    cur.execute("INSERT OR IGNORE INTO referrals VALUES (?,?)", (inviter, invited))
+    cur.execute(
+        "UPDATE users SET invited_by = ? WHERE user_id = ? AND invited_by IS NULL",
+        (inviter, invited),
+    )
+    cur.execute(
+        "INSERT OR IGNORE INTO referrals (inviter_id, invited_user_id) VALUES (?, ?)",
+        (inviter, invited),
+    )
 
     conn.commit()
     conn.close()
     return True
 
 
-def get_ref_count(user_id):
+def get_ref_count(user_id: int) -> int:
     conn = sqlite3.connect(DB_PATH)
     cur = conn.cursor()
-    cur.execute("SELECT COUNT(*) FROM referrals WHERE inviter_id=?", (user_id,))
+    cur.execute("SELECT COUNT(*) FROM referrals WHERE inviter_id = ?", (user_id,))
     count = cur.fetchone()[0]
     conn.close()
     return count
@@ -100,7 +132,7 @@ def main_menu():
     return kb.as_markup()
 
 
-def admin_reply_keyboard(user_id):
+def admin_reply_keyboard(user_id: int):
     kb = InlineKeyboardBuilder()
     kb.button(text="✉️ Ответить клиенту", callback_data=f"reply:{user_id}")
     return kb.as_markup()
@@ -114,11 +146,12 @@ async def start(message: Message):
 
     register_user(user_id)
 
-    # рефералка
-    args = message.text.split()
-    if len(args) > 1 and args[1].startswith("ref_"):
-        inviter = int(args[1].replace("ref_", ""))
-        save_ref(user_id, inviter)
+    parts = (message.text or "").split()
+    if len(parts) > 1 and parts[1].startswith("ref_"):
+        raw_inviter = parts[1].replace("ref_", "", 1)
+        if raw_inviter.isdigit():
+            inviter = int(raw_inviter)
+            save_ref(user_id, inviter)
 
     await message.answer(
         "🎧 <b>Я создаю персональные песни под заказ</b>\n\n"
@@ -129,11 +162,11 @@ async def start(message: Message):
         "— подарка 🎁\n\n"
         "🎶 Получится как настоящий трек — с эмоциями и смыслом\n\n"
         "👇 Выбери действие",
-        reply_markup=main_menu()
+        reply_markup=main_menu(),
     )
 
 
-# ---------- CALLBACK ----------
+# ---------- CALLBACKS ----------
 @dp.callback_query(F.data == "menu:music")
 async def music(cb: CallbackQuery):
     user_mode[cb.from_user.id] = "music"
@@ -160,7 +193,6 @@ async def song(cb: CallbackQuery):
 async def refs(cb: CallbackQuery):
     user_id = cb.from_user.id
     count = get_ref_count(user_id)
-
     link = f"https://t.me/{BOT_USERNAME}?start=ref_{user_id}"
 
     await cb.message.answer(
@@ -173,6 +205,10 @@ async def refs(cb: CallbackQuery):
 
 @dp.callback_query(F.data.startswith("reply:"))
 async def reply_to_user(cb: CallbackQuery):
+    if cb.from_user.id != ADMIN_ID:
+        await cb.answer("Нет доступа", show_alert=True)
+        return
+
     user_id = int(cb.data.split(":")[1])
     admin_reply_target[cb.from_user.id] = user_id
 
@@ -184,14 +220,28 @@ async def reply_to_user(cb: CallbackQuery):
     await cb.answer()
 
 
+# ---------- COMMANDS ----------
+@dp.message(F.text == "/cancel_reply")
+async def cancel_reply(message: Message):
+    if message.from_user.id in admin_reply_target:
+        del admin_reply_target[message.from_user.id]
+        await message.answer("Режим ответа отключен.")
+    else:
+        await message.answer("Режим ответа не был включен.")
+
+
 # ---------- TEXT ----------
 @dp.message()
 async def text_handler(message: Message):
     user_id = message.from_user.id
-    text = message.text
-    mode = user_mode.get(user_id)
+    text = (message.text or "").strip()
+    mode = user_mode.get(user_id, "music")
 
-    # --- ответ админа ---
+    if not text:
+        await message.answer("Отправь текстовое сообщение.")
+        return
+
+    # Ответ админа клиенту
     if user_id in admin_reply_target:
         target = admin_reply_target[user_id]
         await bot.send_message(target, f"💬 Ответ менеджера:\n\n{text}")
@@ -199,47 +249,44 @@ async def text_handler(message: Message):
         await message.answer("✅ Ответ отправлен")
         return
 
-    # --- заявка ---
+    # Заявка на песню
     if mode == "song":
         await message.answer(
             "✅ <b>Заявка принята</b>\n\n"
             "Я скоро посмотрю и свяжусь с тобой 👌",
-            reply_markup=main_menu()
+            reply_markup=main_menu(),
         )
 
         await bot.send_message(
             ADMIN_ID,
             f"🔥 <b>НОВАЯ ЗАЯВКА</b>\n\n"
             f"ID: {user_id}\n\n{text}",
-            reply_markup=admin_reply_keyboard(user_id)
+            reply_markup=admin_reply_keyboard(user_id),
         )
         return
 
-    # --- ПОИСК + ПЛЕЕР (ВАЖНО) ---
+    # Поиск музыки с превью
     if mode == "music":
-        query = text.strip()
-
         await message.answer("🔎 Ищу...")
 
         try:
             response = requests.get(
                 f"{BACKEND_URL}/search",
-                params={"q": query},
-                timeout=10
+                params={"q": text},
+                timeout=15,
             )
-
+            response.raise_for_status()
             data = response.json()
 
             if not data:
                 await message.answer("😔 Ничего не найдено")
                 return
 
-            # отправляем 3 превью как плеер
             for track in data[:3]:
                 await message.answer_audio(
                     audio=track["preview_url"],
                     title=track["title"],
-                    performer=track["artist"]
+                    performer=track["artist"],
                 )
 
         except Exception as e:
