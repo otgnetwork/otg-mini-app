@@ -72,12 +72,7 @@ async def cmd_start(message: Message):
         "— годовщины 💍\n"
         "— подарка 🎁\n\n"
         "🎬 Я также веду живые эфиры в TikTok — можешь залететь прямо сейчас 👇",
-        parse_mode="HTML"
-    )
-
-    await message.answer(
-        "Добро пожаловать в музыкального бота\n\n"
-        "Выбери действие ниже:",
+        parse_mode="HTML",
         reply_markup=main_menu()
     )
 
