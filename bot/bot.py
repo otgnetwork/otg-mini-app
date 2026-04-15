@@ -92,16 +92,21 @@ async def menu_music(callback: CallbackQuery) -> None:
 @dp.callback_query(F.data == "menu:song")
 async def menu_song(callback: CallbackQuery) -> None:
     user_mode[callback.from_user.id] = "song"
+
     await callback.message.edit_text(
-        "<b>✨ Заказать персональную песню</b>\n\n"
-        "Напиши одним сообщением:\n"
+        "✨ <b>Я создам для тебя персональную песню</b>\n\n"
+        "Это будет не шаблон — а трек именно про вашу историю ❤️\n\n"
+        "🔥 Напиши одним сообщением:\n"
         "— для кого песня\n"
         "— повод\n"
         "— стиль\n"
         "— настроение\n"
-        "— важные детали",
+        "— важные детали\n\n"
+        "💡 Чем подробнее — тем сильнее получится результат",
+        parse_mode="HTML",
         reply_markup=main_menu()
     )
+
     await callback.answer()
 
 
