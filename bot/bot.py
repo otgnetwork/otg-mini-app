@@ -1,0 +1,208 @@
+import os
+import re
+import ssl
+import asyncio
+import aiohttp
+import certifi
+
+from dotenv import load_dotenv
+from aiogram import Bot, Dispatcher, F
+from aiogram.enums import ParseMode
+from aiogram.filters import CommandStart
+from aiogram.types import (
+    Message,
+    CallbackQuery,
+    BufferedInputFile,
+    ReplyKeyboardRemove,
+)
+from aiogram.client.default import DefaultBotProperties
+from aiogram.utils.keyboard import InlineKeyboardBuilder
+
+load_dotenv()
+
+BOT_TOKEN = os.getenv("BOT_TOKEN")
+BACKEND_URL = os.getenv("BACKEND_URL", "http://127.0.0.1:8001")
+ADMIN_ID = 1485749631
+
+TIKTOK_URL = "https://www.tiktok.com/@alexey_pv_"
+
+if not BOT_TOKEN:
+    raise RuntimeError("BOT_TOKEN is not set in .env")
+
+bot = Bot(
+    token=BOT_TOKEN,
+    default=DefaultBotProperties(parse_mode=ParseMode.HTML)
+)
+dp = Dispatcher()
+
+user_mode: dict[int, str] = {}
+admin_reply_target: dict[int, int] = {}
+
+
+def main_menu():
+    builder = InlineKeyboardBuilder()
+    builder.button(text="🎵 Найти музыку", callback_data="menu:music")
+    builder.button(text="✨ Заказать песню", callback_data="menu:song")
+    builder.button(text="🎥 Музыкальный эфир OTG в TikTok", url=TIKTOK_URL)
+    builder.adjust(1)
+    return builder.as_markup()
+
+
+def admin_reply_keyboard(user_id: int):
+    builder = InlineKeyboardBuilder()
+    builder.button(
+        text="✉️ Ответить клиенту",
+        callback_data=f"admin_reply:{user_id}"
+    )
+    return builder.as_markup()
+
+
+def safe_filename(value: str) -> str:
+    value = re.sub(r'[\\/*?:"<>|]', "", value)
+    value = re.sub(r"\s+", " ", value).strip()
+    return value[:80] or "track"
+
+
+@dp.message(CommandStart())
+async def cmd_start(message: Message) -> None:
+    user_mode[message.from_user.id] = "music"
+
+    await message.answer(
+        "<b>Добро пожаловать в музыкального бота</b>\n\nВыбери действие ниже:",
+        reply_markup=ReplyKeyboardRemove()
+    )
+
+    await message.answer(
+        "Главное меню:",
+        reply_markup=main_menu()
+    )
+
+
+@dp.callback_query(F.data == "menu:music")
+async def menu_music(callback: CallbackQuery) -> None:
+    user_mode[callback.from_user.id] = "music"
+    await callback.message.edit_text(
+        "<b>🎵 Поиск музыки</b>\n\n"
+        "Отправь название трека или исполнителя.\n"
+        "Пример: <code>Eminem</code>",
+        reply_markup=main_menu()
+    )
+    await callback.answer()
+
+
+@dp.callback_query(F.data == "menu:song")
+async def menu_song(callback: CallbackQuery) -> None:
+    user_mode[callback.from_user.id] = "song"
+    await callback.message.edit_text(
+        "<b>✨ Заказать персональную песню</b>\n\n"
+        "Напиши одним сообщением:\n"
+        "— для кого песня\n"
+        "— повод\n"
+        "— стиль\n"
+        "— настроение\n"
+        "— важные детали",
+        reply_markup=main_menu()
+    )
+    await callback.answer()
+
+
+@dp.callback_query(F.data.startswith("admin_reply:"))
+async def admin_reply_start(callback: CallbackQuery) -> None:
+    if callback.from_user.id != ADMIN_ID:
+        await callback.answer("Недостаточно прав", show_alert=True)
+        return
+
+    user_id = int(callback.data.split(":", 1)[1])
+    admin_reply_target[callback.from_user.id] = user_id
+
+    await callback.answer("Режим ответа включен")
+    await callback.message.answer(
+        "✉️ <b>Режим ответа клиенту включен</b>\n\n"
+        f"Следующее сообщение уйдет пользователю <code>{user_id}</code>\n\n"
+        "Отмена: /cancel_reply"
+    )
+
+
+async def fetch_tracks(query: str) -> list[dict]:
+    url = f"{BACKEND_URL}/search"
+    params = {"q": query}
+
+    async with aiohttp.ClientSession() as session:
+        async with session.get(url, params=params, timeout=20) as response:
+            response.raise_for_status()
+            data = await response.json()
+
+    return data.get("results", [])
+
+
+async def download_preview(preview_url: str) -> bytes:
+    ssl_context = ssl.create_default_context(cafile=certifi.where())
+    connector = aiohttp.TCPConnector(ssl=ssl_context)
+
+    async with aiohttp.ClientSession(connector=connector) as session:
+        async with session.get(preview_url, timeout=30) as response:
+            response.raise_for_status()
+            return await response.read()
+
+
+@dp.message(F.text == "/cancel_reply")
+async def cancel_reply(message: Message) -> None:
+    if message.from_user.id in admin_reply_target:
+        del admin_reply_target[message.from_user.id]
+        await message.answer("Режим ответа отключен.")
+
+
+@dp.message()
+async def handle_text(message: Message) -> None:
+    text = (message.text or "").strip()
+
+    # 🔥 Ответ клиенту
+    if message.from_user.id == ADMIN_ID and message.from_user.id in admin_reply_target:
+        target_user_id = admin_reply_target[message.from_user.id]
+
+        await bot.send_message(
+            target_user_id,
+            "📩 <b>Ответ от менеджера:</b>\n\n" + text
+        )
+
+        await message.answer("✅ Отправлено")
+        del admin_reply_target[message.from_user.id]
+        return
+
+    mode = user_mode.get(message.from_user.id, "music")
+
+    # 🎤 Заявка
+    if mode == "song":
+        await message.answer("✅ Заявка принята", reply_markup=main_menu())
+
+        await bot.send_message(
+            ADMIN_ID,
+            f"<b>Новая заявка</b>\n\n{text}",
+            reply_markup=admin_reply_keyboard(message.from_user.id)
+        )
+        return
+
+    # 🎵 Музыка
+    await message.answer("🔎 Ищу...")
+
+    results = await fetch_tracks(text)
+
+    for item in results[:3]:
+        artist = item["artist"]["name"]
+        title = item["title"]
+        preview = item["preview"]
+
+        audio_bytes = await download_preview(preview)
+
+        await message.answer_audio(
+            audio=BufferedInputFile(audio_bytes, filename="track.mp3"),
+            caption=f"{artist} — {title}"
+        )
+
+
+async def main():
+    await dp.start_polling(bot)
+
+
+if __name__ == "__main__":
+    asyncio.run(main())
