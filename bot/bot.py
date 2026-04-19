@@ -452,12 +452,6 @@ async def handle_text(message: Message) -> None:
             reply_markup=main_menu()
         )
 
-        await message.answer(
-            "🔥 Понравился бот?\n\n"
-            "Нажми «Мои приглашения» и отправь друзьям свою ссылку 👇",
-            reply_markup=share_keyboard()
-        )
-
     except Exception as e:
         print("SEARCH ERROR:", e)
         await message.answer("❌ Ошибка поиска. Попробуй позже.")
