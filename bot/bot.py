@@ -1,10 +1,10 @@
 import os
 import re
-import ssl
 import sqlite3
 import asyncio
 import aiohttp
 import certifi
+import ssl
 
 from dotenv import load_dotenv
 from aiogram import Bot, Dispatcher, F
@@ -71,7 +71,10 @@ def init_db() -> None:
 def register_user_if_needed(user_id: int) -> None:
     conn = get_db_connection()
     cur = conn.cursor()
-    cur.execute("INSERT OR IGNORE INTO users (user_id, invited_by) VALUES (?, NULL)", (user_id,))
+    cur.execute(
+        "INSERT OR IGNORE INTO users (user_id, invited_by) VALUES (?, NULL)",
+        (user_id,)
+    )
     conn.commit()
     conn.close()
 
@@ -83,8 +86,14 @@ def save_referral(invited_user_id: int, inviter_id: int) -> bool:
     conn = get_db_connection()
     cur = conn.cursor()
 
-    cur.execute("INSERT OR IGNORE INTO users (user_id, invited_by) VALUES (?, NULL)", (invited_user_id,))
-    cur.execute("INSERT OR IGNORE INTO users (user_id, invited_by) VALUES (?, NULL)", (inviter_id,))
+    cur.execute(
+        "INSERT OR IGNORE INTO users (user_id, invited_by) VALUES (?, NULL)",
+        (invited_user_id,)
+    )
+    cur.execute(
+        "INSERT OR IGNORE INTO users (user_id, invited_by) VALUES (?, NULL)",
+        (inviter_id,)
+    )
 
     cur.execute("SELECT invited_by FROM users WHERE user_id = ?", (invited_user_id,))
     row = cur.fetchone()
@@ -115,7 +124,10 @@ def save_referral(invited_user_id: int, inviter_id: int) -> bool:
 def get_referrals_count(inviter_id: int) -> int:
     conn = get_db_connection()
     cur = conn.cursor()
-    cur.execute("SELECT COUNT(*) AS total FROM referrals WHERE inviter_id = ?", (inviter_id,))
+    cur.execute(
+        "SELECT COUNT(*) AS total FROM referrals WHERE inviter_id = ?",
+        (inviter_id,)
+    )
     row = cur.fetchone()
     conn.close()
     return int(row["total"]) if row else 0
@@ -310,7 +322,6 @@ async def fetch_tracks(query: str) -> list[dict]:
             response.raise_for_status()
             data = await response.json()
 
-    # backend может вернуть либо список, либо {"results": [...]}
     if isinstance(data, list):
         return data
     if isinstance(data, dict):
@@ -404,10 +415,9 @@ async def handle_text(message: Message) -> None:
             await message.answer("Ничего не найдено.", reply_markup=main_menu())
             return
 
+        sent_any = False
+
         for item in results[:3]:
-            # поддержка двух форматов:
-            # 1) {"title": "...", "artist": {"name": "..."}, "preview": "..."}
-            # 2) {"title": "...", "artist": "...", "preview_url": "..."}
             title = item.get("title", "Unknown title")
 
             artist_field = item.get("artist")
@@ -431,6 +441,11 @@ async def handle_text(message: Message) -> None:
                 title=title,
                 performer=artist
             )
+            sent_any = True
+
+        if not sent_any:
+            await message.answer("Ничего не найдено.", reply_markup=main_menu())
+            return
 
         await message.answer(
             "Можешь выбрать следующее действие:",
@@ -446,6 +461,7 @@ async def handle_text(message: Message) -> None:
     except Exception as e:
         print("SEARCH ERROR:", e)
         await message.answer("❌ Ошибка поиска. Попробуй позже.")
+
 
 async def main():
     global BOT_USERNAME
