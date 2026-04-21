@@ -1,11 +1,12 @@
 import os
 import asyncio
+import aiohttp
 
 from dotenv import load_dotenv
 from aiogram import Bot, Dispatcher, F
 from aiogram.enums import ParseMode
 from aiogram.filters import CommandStart
-from aiogram.types import Message, CallbackQuery
+from aiogram.types import Message, CallbackQuery, BufferedInputFile
 from aiogram.client.default import DefaultBotProperties
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 
@@ -65,21 +66,39 @@ async def search_youtube_clips(query: str, limit: int = 3) -> list[dict]:
             video_id = entry.get("id")
             title = entry.get("title") or "Unknown title"
             channel = entry.get("channel") or entry.get("uploader") or "Unknown channel"
+            thumbnail = entry.get("thumbnail")
 
             if not video_id:
                 continue
+
+            if not thumbnail and video_id:
+                thumbnail = f"https://i.ytimg.com/vi/{video_id}/hqdefault.jpg"
 
             results.append(
                 {
                     "title": title,
                     "channel": channel,
                     "url": f"https://www.youtube.com/watch?v={video_id}",
+                    "thumbnail": thumbnail,
                 }
             )
 
         return results
 
     return await asyncio.to_thread(_search)
+
+
+async def download_image(url: str) -> bytes | None:
+    if not url:
+        return None
+
+    try:
+        async with aiohttp.ClientSession() as session:
+            async with session.get(url, timeout=20) as response:
+                response.raise_for_status()
+                return await response.read()
+    except Exception:
+        return None
 
 
 @dp.message(CommandStart())
@@ -98,7 +117,7 @@ async def start(message: Message):
 async def menu_clips(callback: CallbackQuery):
     user_mode[callback.from_user.id] = "clips"
 
-    await callback.message.edit_text(
+    await callback.message.answer(
         "🎬 <b>Поиск клипов</b>\n\n"
         "Отправь название трека или исполнителя.\n"
         "Пример: <code>Eminem</code>"
@@ -150,14 +169,28 @@ async def handle_text(message: Message):
             return
 
         for clip in clips:
-            await message.answer(
-                f"🎬 <b>{clip['title']}</b>\n"
-                f"👤 {clip['channel']}",
-                reply_markup=clip_result_keyboard(clip["url"])
+            caption = (
+                f"🎬 <b>{clip['title']}</b>\n\n"
+                f"👤 {clip['channel']}\n\n"
+                f"Смотри клип 👇"
             )
 
+            image_bytes = await download_image(clip.get("thumbnail"))
+
+            if image_bytes:
+                await message.answer_photo(
+                    photo=BufferedInputFile(image_bytes, filename="thumbnail.jpg"),
+                    caption=caption,
+                    reply_markup=clip_result_keyboard(clip["url"])
+                )
+            else:
+                await message.answer(
+                    caption,
+                    reply_markup=clip_result_keyboard(clip["url"])
+                )
+
         await message.answer(
-            "✨ Хочешь не просто клип, а персональную песню про вашу историю?",
+            "👇 Выбери действие:",
             reply_markup=main_menu()
         )
 
