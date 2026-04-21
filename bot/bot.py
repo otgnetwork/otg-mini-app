@@ -137,12 +137,11 @@ def get_referrals_count(inviter_id: int) -> int:
 
 def main_menu():
     builder = InlineKeyboardBuilder()
-    builder.button(text="🎵 Найти музыку", callback_data="menu:music")
-    builder.button(text="✨ Заказать песню", callback_data="menu:song")
     builder.button(
         text="🚀 Открыть OTG Media",
         web_app=WebAppInfo(url=MINI_APP_URL)
     )
+    builder.button(text="✨ Заказать песню", callback_data="menu:song")
     builder.button(text="🎥 Музыкальный эфир OTG в TikTok", url=TIKTOK_URL)
     builder.adjust(1)
     return builder.as_markup()
@@ -188,13 +187,12 @@ async def cmd_start(message: Message, command: CommandObject | None = None):
             )
 
     text = (
-        "🎧 <b>Привет! Я делаю персональные песни под заказ</b>\n\n"
-        "🔥 Подойдет для:\n"
-        "— любимой ❤️\n"
-        "— годовщины 💍\n"
-        "— подарка 🎁\n\n"
-        "🚀 Теперь у нас есть и <b>OTG Media Network</b> внутри Telegram\n\n"
-        "👇 Выбери действие:"
+        "🎧 <b>Добро пожаловать в OTG Media Network</b>\n\n"
+        "Здесь ты можешь:\n"
+        "— найти музыку и слушать превью 🎵\n"
+        "— искать клипы 🎬\n"
+        "— заказать персональную песню ✨\n\n"
+        "👇 Начни с главного:"
     )
 
     if referral_saved:
@@ -263,20 +261,6 @@ async def menu_myrefs(callback: CallbackQuery) -> None:
         "Управление рефералкой:",
         reply_markup=share_keyboard()
     )
-    await callback.answer()
-
-
-@dp.callback_query(F.data == "menu:music")
-async def menu_music(callback: CallbackQuery) -> None:
-    user_mode[callback.from_user.id] = "music"
-
-    await callback.message.edit_text(
-        "<b>🎵 Поиск музыки</b>\n\n"
-        "Отправь название трека или исполнителя.\n"
-        "Пример: <code>Eminem</code>",
-        parse_mode="HTML"
-    )
-
     await callback.answer()
 
 
@@ -402,55 +386,11 @@ async def handle_text(message: Message) -> None:
         )
         return
 
-    await message.answer("🔎 Ищу...")
-
-    try:
-        results = await fetch_tracks(text)
-
-        if not results:
-            await message.answer("Ничего не найдено.", reply_markup=main_menu())
-            return
-
-        sent_any = False
-
-        for item in results[:3]:
-            title = item.get("title", "Unknown title")
-
-            artist_field = item.get("artist")
-            if isinstance(artist_field, dict):
-                artist = artist_field.get("name", "Unknown artist")
-            else:
-                artist = artist_field or "Unknown artist"
-
-            preview = item.get("preview") or item.get("preview_url")
-            if not preview:
-                continue
-
-            audio_bytes = await download_preview(preview)
-
-            await message.answer_audio(
-                audio=BufferedInputFile(
-                    audio_bytes,
-                    filename=f"{safe_filename(artist)} - {safe_filename(title)}.mp3"
-                ),
-                caption=f"{artist} — {title}",
-                title=title,
-                performer=artist
-            )
-            sent_any = True
-
-        if not sent_any:
-            await message.answer("Ничего не найдено.", reply_markup=main_menu())
-            return
-
-        await message.answer(
-            "Можешь выбрать следующее действие:",
-            reply_markup=main_menu()
-        )
-
-    except Exception as e:
-        print("SEARCH ERROR:", e)
-        await message.answer("❌ Ошибка поиска. Попробуй позже.")
+    await message.answer(
+        "🚀 Основной функционал теперь внутри <b>OTG Media</b>.\n\n"
+        "Нажми кнопку ниже, чтобы открыть приложение:",
+        reply_markup=main_menu()
+    )
 
 
 async def main():
