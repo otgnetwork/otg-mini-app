@@ -1,10 +1,10 @@
 import os
 import re
+import ssl
 import sqlite3
 import asyncio
 import aiohttp
 import certifi
-import ssl
 
 from dotenv import load_dotenv
 from aiogram import Bot, Dispatcher, F
@@ -14,6 +14,7 @@ from aiogram.types import (
     Message,
     CallbackQuery,
     BufferedInputFile,
+    WebAppInfo,
 )
 from aiogram.client.default import DefaultBotProperties
 from aiogram.utils.keyboard import InlineKeyboardBuilder
@@ -23,7 +24,8 @@ load_dotenv()
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 BACKEND_URL = os.getenv("BACKEND_URL", "http://127.0.0.1:8001")
 ADMIN_ID = 1485749631
-TIKTOK_URL = "https://www.tiktok.com/@otg_network_"
+TIKTOK_URL = "https://www.tiktok.com/@alexey_pv_"
+MINI_APP_URL = "https://otg-mini-app-production.up.railway.app"
 DB_PATH = "referrals.db"
 
 if not BOT_TOKEN:
@@ -137,6 +139,10 @@ def main_menu():
     builder = InlineKeyboardBuilder()
     builder.button(text="🎵 Найти музыку", callback_data="menu:music")
     builder.button(text="✨ Заказать песню", callback_data="menu:song")
+    builder.button(
+        text="🚀 Открыть OTG Media",
+        web_app=WebAppInfo(url=MINI_APP_URL)
+    )
     builder.button(text="🎥 Музыкальный эфир OTG в TikTok", url=TIKTOK_URL)
     builder.adjust(1)
     return builder.as_markup()
@@ -187,7 +193,8 @@ async def cmd_start(message: Message, command: CommandObject | None = None):
         "— любимой ❤️\n"
         "— годовщины 💍\n"
         "— подарка 🎁\n\n"
-        "🎬 Я также веду живые эфиры в TikTok — можешь залететь прямо сейчас 👇"
+        "🚀 Теперь у нас есть и <b>OTG Media Network</b> внутри Telegram\n\n"
+        "👇 Выбери действие:"
     )
 
     if referral_saved:
@@ -224,9 +231,8 @@ async def my_refs(message: Message) -> None:
     await message.answer(
         "📊 <b>Твоя реферальная программа</b>\n\n"
         f"<b>Приглашено:</b> {total}\n\n"
-        "📎 <b>Твоя ссылка:</b>\n"
-        f"<code>{ref_link}</code>\n\n"
-        "Скопируй её и отправь друзьям 👇"
+        f"<b>Твоя ссылка:</b>\n<code>{ref_link}</code>\n\n"
+        "Отправь её друзьям 👇"
     )
 
     await message.answer(
@@ -249,16 +255,14 @@ async def menu_myrefs(callback: CallbackQuery) -> None:
     await callback.message.answer(
         "📊 <b>Твоя реферальная программа</b>\n\n"
         f"<b>Приглашено:</b> {total}\n\n"
-        "📎 <b>Твоя ссылка:</b>\n"
-        f"<code>{ref_link}</code>\n\n"
-        "Скопируй её и отправь друзьям 👇"
+        f"<b>Твоя ссылка:</b>\n<code>{ref_link}</code>\n\n"
+        "Отправь её друзьям 👇"
     )
 
     await callback.message.answer(
         "Управление рефералкой:",
         reply_markup=share_keyboard()
     )
-
     await callback.answer()
 
 
