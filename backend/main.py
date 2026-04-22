@@ -1,48 +1,18 @@
-from fastapi import FastAPI, HTTPException
-import requests
+from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
+from deezer import search_tracks
 
 app = FastAPI()
 
-
-@app.get("/")
-def root():
-    return {"status": "ok"}
-
+# 🔥 ВАЖНО: разрешаем запросы с фронта
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],  # можно потом ограничить
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 @app.get("/search")
-def search(q: str):
-    q = (q or "").strip()
-    if not q:
-        raise HTTPException(status_code=400, detail="Query is required")
-
-    url = "https://itunes.apple.com/search"
-    params = {
-        "term": q,
-        "limit": 5,
-        "media": "music",
-    }
-
-    try:
-        response = requests.get(url, params=params, timeout=15)
-        response.raise_for_status()
-        data = response.json()
-    except requests.RequestException as e:
-        raise HTTPException(status_code=502, detail=f"Search provider error: {e}")
-
-    results = []
-
-    for item in data.get("results", []):
-        preview = item.get("previewUrl")
-        title = item.get("trackName")
-        artist = item.get("artistName")
-
-        if preview and title and artist:
-            results.append(
-                {
-                    "title": title,
-                    "artist": artist,
-                    "preview_url": preview,
-                }
-            )
-
-    return results
+async def search(q: str):
+    return search_tracks(q)
