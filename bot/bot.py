@@ -141,7 +141,18 @@ def main_menu():
         text="🚀 Открыть OTG Media",
         web_app=WebAppInfo(url=MINI_APP_URL)
     )
-    builder.button(text="✨ Заказать песню", callback_data="menu:song")
+    builder.button(text="🎥 Музыкальный эфир OTG в TikTok", url=TIKTOK_URL)
+    builder.adjust(1)
+    return builder.as_markup()
+
+
+def after_request_menu():
+    builder = InlineKeyboardBuilder()
+    builder.button(
+        text="🚀 Открыть OTG Media",
+        web_app=WebAppInfo(url=MINI_APP_URL)
+    )
+    builder.button(text="📊 Мои приглашения", callback_data="menu:myrefs")
     builder.button(text="🎥 Музыкальный эфир OTG в TikTok", url=TIKTOK_URL)
     builder.adjust(1)
     return builder.as_markup()
@@ -187,12 +198,9 @@ async def cmd_start(message: Message, command: CommandObject | None = None):
             )
 
     text = (
-        "🎧 <b>Добро пожаловать в OTG Media Network</b>\n\n"
-        "Здесь ты можешь:\n"
-        "— найти музыку и слушать превью 🎵\n"
-        "— искать клипы 🎬\n"
-        "— заказать персональную песню ✨\n\n"
-        "👇 Начни с главного:"
+        "🚀 <b>OTG Media Network</b>\n\n"
+        "Музыка, клипы и персональные песни — в одном месте.\n\n"
+        "👇 Открой приложение"
     )
 
     if referral_saved:
@@ -372,7 +380,7 @@ async def handle_text(message: Message) -> None:
 
         await message.answer(
             "Можешь выбрать следующее действие:",
-            reply_markup=main_menu()
+            reply_markup=after_request_menu()
         )
 
         await bot.send_message(
