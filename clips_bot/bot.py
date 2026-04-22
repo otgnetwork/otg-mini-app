@@ -1,6 +1,6 @@
 import os
 import asyncio
-import aiohttp
+import urllib.request
 
 from dotenv import load_dotenv
 from aiogram import Bot, Dispatcher, F
@@ -71,7 +71,7 @@ async def search_youtube_clips(query: str, limit: int = 3) -> list[dict]:
             if not video_id:
                 continue
 
-            if not thumbnail and video_id:
+            if not thumbnail:
                 thumbnail = f"https://i.ytimg.com/vi/{video_id}/hqdefault.jpg"
 
             results.append(
@@ -88,77 +88,25 @@ async def search_youtube_clips(query: str, limit: int = 3) -> list[dict]:
     return await asyncio.to_thread(_search)
 
 
-async def download_image(url: str) -> bytes | None:
+async def download_image(url: str):
     if not url:
         return None
 
+    def _download():
+        with urllib.request.urlopen(url, timeout=20) as response:
+            return response.read()
+
     try:
-        async with aiohttp.ClientSession() as session:
-            async with session.get(url, timeout=20) as response:
-                response.raise_for_status()
-                return await response.read()
+        return await asyncio.to_thread(_download)
     except Exception:
         return None
 
 
-@dp.message(CommandStart())
-async def start(message: Message):
-    user_mode[message.from_user.id] = "idle"
-
-    await message.answer(
-        "🎬 <b>OTG Clips</b>\n\n"
-        "Я помогу найти музыкальные клипы 🔥\n\n"
-        "👇 Выбери действие:",
-        reply_markup=main_menu()
-    )
-
-
-@dp.callback_query(F.data == "menu:clips")
-async def menu_clips(callback: CallbackQuery):
-    user_mode[callback.from_user.id] = "clips"
-
-    await callback.message.answer(
-        "🎬 <b>Поиск клипов</b>\n\n"
-        "Отправь название трека или исполнителя.\n"
-        "Пример: <code>Eminem</code>"
-    )
-    await callback.answer()
-
-
-@dp.callback_query(F.data == "menu:popular")
-async def menu_popular(callback: CallbackQuery):
-    await callback.message.answer(
-        "🔥 <b>Популярные запросы</b>\n\n"
-        "Попробуй написать:\n"
-        "— Eminem\n"
-        "— The Weeknd\n"
-        "— Rihanna\n"
-        "— Drake\n"
-        "— Billie Eilish"
-    )
-    await callback.answer()
-
-
-@dp.message()
-async def handle_text(message: Message):
-    text = (message.text or "").strip()
-    mode = user_mode.get(message.from_user.id, "idle")
-
-    if not text:
-        await message.answer("Отправь текстовый запрос.")
-        return
-
-    if mode != "clips":
-        await message.answer(
-            "👇 Выбери действие:",
-            reply_markup=main_menu()
-        )
-        return
-
+async def send_clip_results(message: Message, query: str) -> None:
     await message.answer("🔎 Ищу клипы...")
 
     try:
-        clips = await search_youtube_clips(text, limit=3)
+        clips = await search_youtube_clips(query, limit=3)
 
         if not clips:
             await message.answer(
@@ -200,6 +148,59 @@ async def handle_text(message: Message):
             "❌ Ошибка поиска клипов. Попробуй позже.",
             reply_markup=main_menu()
         )
+
+
+@dp.message(CommandStart())
+async def start(message: Message):
+    user_mode[message.from_user.id] = "clips"
+
+    await message.answer(
+        "🎬 <b>OTG Clips</b>\n\n"
+        "Я помогу найти музыкальные клипы 🔥\n\n"
+        "Просто напиши название трека или исполнителя\n"
+        "или выбери действие ниже 👇",
+        reply_markup=main_menu()
+    )
+
+
+@dp.callback_query(F.data == "menu:clips")
+async def menu_clips(callback: CallbackQuery):
+    user_mode[callback.from_user.id] = "clips"
+
+    await callback.message.answer(
+        "🎬 <b>Поиск клипов</b>\n\n"
+        "Отправь название трека или исполнителя.\n"
+        "Пример: <code>Eminem</code>"
+    )
+    await callback.answer()
+
+
+@dp.callback_query(F.data == "menu:popular")
+async def menu_popular(callback: CallbackQuery):
+    user_mode[callback.from_user.id] = "clips"
+
+    await callback.message.answer(
+        "🔥 <b>Популярные запросы</b>\n\n"
+        "Попробуй написать:\n"
+        "— Eminem\n"
+        "— The Weeknd\n"
+        "— Rihanna\n"
+        "— Drake\n"
+        "— Billie Eilish"
+    )
+    await callback.answer()
+
+
+@dp.message()
+async def handle_text(message: Message):
+    text = (message.text or "").strip()
+
+    if not text:
+        await message.answer("Отправь текстовый запрос.")
+        return
+
+    user_mode[message.from_user.id] = "clips"
+    await send_clip_results(message, text)
 
 
 async def main():
