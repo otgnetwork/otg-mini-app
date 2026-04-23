@@ -6,7 +6,7 @@ from telegram.ext import Application, CommandHandler, ContextTypes
 logging.basicConfig(level=logging.INFO)
 
 BOT_TOKEN = os.getenv("BOT_TOKEN")
-MINI_APP_URL = "https://otg-mini-app-clean-production.up.railway.app"
+MINI_APP_URL = "https://otg-mini-app-clean-production.up.railway.app/index.html"
 TIKTOK_URL = "https://www.tiktok.com/@alexey_pv_/"
 
 START_TEXT = (
